@@ -1,4 +1,5 @@
-use crate::data;
+use crate::helpers::data;
+
 use std::{
     sync::mpsc::Receiver,
     thread::{self, JoinHandle},

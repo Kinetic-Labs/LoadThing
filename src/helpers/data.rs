@@ -8,9 +8,9 @@ pub struct Request {
 }
 
 impl fmt::Display for Request {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
-            f,
+            formatter,
             "Request {{ location: {}, target: {}, path, {} }}",
             self.location, self.target, self.path
         )

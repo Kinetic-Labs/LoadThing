@@ -1,4 +1,4 @@
-use crate::data::{self, Request};
+use crate::helpers::data::{self, Request};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::mpsc::Sender;
@@ -44,7 +44,7 @@ fn handle_client(mut client: TcpStream, tx: Sender<data::Request>) {
         path: path.to_string(),
     }) {
         Ok(_) => {}
-        Err(error) => eprintln!("error sending data: {}", error),
+        Err(error) => eprintln!("Error sending data: {}", error),
     }
 
     let target_addr = format!("{}:{}", host, port);
