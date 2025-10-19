@@ -1,7 +1,9 @@
+mod config;
 mod features;
 mod helpers;
 mod network;
 
+use crate::config::parser::Config;
 use crate::features::processor;
 use crate::helpers::data::Request;
 use crate::network::proxy;
@@ -14,16 +16,19 @@ fn start_tasks(
     tx: Sender<Request>,
     rx: Receiver<Request>,
     listener: TcpListener,
+    config: Config,
 ) -> (JoinHandle<()>, JoinHandle<()>) {
     (
-        processor::start_processor(rx),
-        proxy::start_proxy_listener(listener, tx),
+        processor::start_processor(rx, config.features_config),
+        proxy::start_proxy_listener(listener, tx, config.proxy_config),
     )
 }
 
 fn main() -> io::Result<()> {
-    let port: u16 = 9595;
-    let address: String = format!("127.0.0.1:{}", port);
+    let config: Config = config::parser::parse_config()?;
+    let port: u16 = config.load_thing_config.port;
+    let hostname: String = config.clone().load_thing_config.hostname;
+    let address: String = format!("{hostname}:{port}");
     let listener = match TcpListener::bind(&address) {
         Ok(val) => val,
         Err(error) => {
@@ -34,7 +39,7 @@ fn main() -> io::Result<()> {
     };
 
     let (tx, rx) = mpsc::channel::<Request>();
-    let (processor_handle, proxy_handle) = start_tasks(tx, rx, listener);
+    let (processor_handle, proxy_handle) = start_tasks(tx, rx, listener, config);
 
     println!(
         "LoadThing server running on {}",
