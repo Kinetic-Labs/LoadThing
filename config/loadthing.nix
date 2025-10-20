@@ -2,10 +2,10 @@
   # Configure the proxy
   proxy = {
     # Your application (preferably local network)
-    target = "https://example.com";
+    target = "http://localhost";
 
-    # Port to use (443 is default for https)
-    port = 443;
+    # Port to use (80 is default for http)
+    port = 8000;
 
     # Path to fetch ('/' is the root of page)
     path = "/";
