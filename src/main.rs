@@ -12,6 +12,26 @@ use std::net::TcpListener;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::JoinHandle;
 
+const MAGENTA: &str = "\x1b[35m";
+const RESET: &str = "\x1b[0m";
+const ASCII_ART: &str = r#"
+       LoadThing
+   ,--,           ,----,
+,---.'|         ,/   .`|
+|   | :       ,`   .'  :
+:   : |     ;    ;     /
+|   ' :   .'___,/    ,'
+;   ; '   |    :     |
+'   | |__ ;    |.';  ;
+|   | :.'|`----'  |  |
+'   :    ;    '   :  ;
+|   |  ./     |   |  '
+;   : ;       '   :  |
+|   ,/        ;   |.'
+'---'         '---'
+  By Kinetic Labs
+"#;
+
 fn start_tasks(
     tx: Sender<Request>,
     rx: Receiver<Request>,
@@ -25,6 +45,8 @@ fn start_tasks(
 }
 
 fn main() -> io::Result<()> {
+    println!("{}{}{}", MAGENTA, ASCII_ART, RESET);
+
     let config: Config = config::parser::parse_config()?;
     let port: u16 = config.web_config.port;
     let hostname: String = config.clone().web_config.hostname;
