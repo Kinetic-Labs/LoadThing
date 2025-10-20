@@ -3,7 +3,7 @@ mod features;
 mod helpers;
 mod network;
 
-use crate::config::parser::Config;
+use crate::config::structure::Config;
 use crate::features::processor;
 use crate::helpers::data::Request;
 use crate::network::proxy;
@@ -26,8 +26,8 @@ fn start_tasks(
 
 fn main() -> io::Result<()> {
     let config: Config = config::parser::parse_config()?;
-    let port: u16 = config.load_thing_config.port;
-    let hostname: String = config.clone().load_thing_config.hostname;
+    let port: u16 = config.web_config.port;
+    let hostname: String = config.clone().web_config.hostname;
     let address: String = format!("{hostname}:{port}");
     let listener = match TcpListener::bind(&address) {
         Ok(val) => val,

@@ -1,10 +1,11 @@
-use crate::config::parser::ProxyConfig;
+use crate::config::structure::ProxyConfig;
 use crate::helpers::data::{self, Request};
 use native_tls::TlsConnector;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::mpsc::Sender;
 use std::thread::{self, JoinHandle};
+use std::time::Instant;
 
 fn rewrite_http_request(buffer: &[u8], clean_host: &str) -> Vec<u8> {
     let request = String::from_utf8_lossy(buffer);
@@ -78,15 +79,7 @@ fn handle_client(mut client: TcpStream, tx: Sender<data::Request>, config: Proxy
         .trim_start_matches("http://")
         .trim_end_matches('/');
 
-    match tx.send(Request {
-        location: host.to_string(),
-        target: host.to_string(),
-        path: path.to_string(),
-    }) {
-        Ok(_) => {}
-        Err(error) => eprintln!("Error sending data: {}", error),
-    }
-
+    let start = Instant::now();
     let target_addr = format!("{}:{}", clean_host, port);
     let mut server = match TcpStream::connect(&target_addr) {
         Ok(s) => s,
@@ -124,6 +117,18 @@ fn handle_client(mut client: TcpStream, tx: Sender<data::Request>, config: Proxy
         if let Err(error) = tls_stream.write_all(&rewritten_request) {
             eprintln!("Failed to write to TLS server: {}", error);
             return;
+        }
+
+        let duration = start.elapsed();
+
+        match tx.send(Request {
+            location: host.to_string(),
+            target: host.to_string(),
+            path: path.to_string(),
+            time: duration.as_millis(),
+        }) {
+            Ok(_) => {}
+            Err(error) => eprintln!("Error sending data: {}", error),
         }
 
         let mut response_buffer = [0; 8192];

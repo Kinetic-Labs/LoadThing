@@ -3,14 +3,19 @@
   proxy = {
     # Your application (preferably local network)
     target = "https://example.com";
+
+    # Port to use (443 is default for https)
     port = 443;
+
+    # Path to fetch ('/' is the root of page)
     path = "/";
   };
 
-  # LoadThing's config
-  load_thing = {
+  # LoadThing's web server config
+  web = {
     # Port to serve app on
     port = 9595;
+
     # Hostname to serve app on
     hostname = "127.0.0.1";
   };
@@ -19,5 +24,8 @@
   features = {
     # Log each request
     log = true;
+
+    # Time the response of each request
+    time = true;
   };
 }

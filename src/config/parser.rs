@@ -1,33 +1,9 @@
+use super::structure::{Config, FeaturesConfig, ProxyConfig, WebConfig};
 use rnix::{Root, SyntaxKind, SyntaxNode};
 use std::{
     fs,
     io::{self, Error},
 };
-
-#[derive(Clone)]
-pub struct ProxyConfig {
-    pub target: String,
-    pub port: u16,
-    pub path: String,
-}
-
-#[derive(Clone)]
-pub struct LoadThingConfig {
-    pub port: u16,
-    pub hostname: String,
-}
-
-#[derive(Clone)]
-pub struct FeaturesConfig {
-    pub log: bool,
-}
-
-#[derive(Clone)]
-pub struct Config {
-    pub proxy_config: ProxyConfig,
-    pub load_thing_config: LoadThingConfig,
-    pub features_config: FeaturesConfig,
-}
 
 fn find_attr_value(node: &SyntaxNode, attr_name: &str) -> Option<String> {
     for child in node.descendants() {
@@ -114,17 +90,22 @@ pub fn parse_config() -> io::Result<Config> {
         .and_then(|node| find_attr_value(&node, "path"))
         .unwrap_or_else(|| "/".to_string());
 
-    let lt_port = find_attrset(&root, "load_thing")
+    let lt_port = find_attrset(&root, "web")
         .and_then(|node| find_attr_value(&node, "port"))
         .and_then(|s| s.parse().ok())
         .unwrap_or(9595);
 
-    let lt_hostname = find_attrset(&root, "load_thing")
+    let lt_hostname = find_attrset(&root, "web")
         .and_then(|node| find_attr_value(&node, "hostname"))
         .unwrap_or_else(|| "127.0.0.1".to_string());
 
     let log_enabled = find_attrset(&root, "features")
         .and_then(|node| find_attr_value(&node, "log"))
+        .map(|s| s == "true")
+        .unwrap_or(true);
+
+    let time_enabled = find_attrset(&root, "features")
+        .and_then(|node| find_attr_value(&node, "time"))
         .map(|s| s == "true")
         .unwrap_or(true);
 
@@ -134,10 +115,13 @@ pub fn parse_config() -> io::Result<Config> {
             port: proxy_port,
             path: proxy_path,
         },
-        load_thing_config: LoadThingConfig {
+        web_config: WebConfig {
             port: lt_port,
             hostname: lt_hostname,
         },
-        features_config: FeaturesConfig { log: log_enabled },
+        features_config: FeaturesConfig {
+            log: log_enabled,
+            time: time_enabled,
+        },
     })
 }

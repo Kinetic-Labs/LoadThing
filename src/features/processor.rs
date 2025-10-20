@@ -1,4 +1,4 @@
-use crate::{config::parser::FeaturesConfig, helpers::data::Request};
+use crate::{config::structure::FeaturesConfig, helpers::data::Request};
 
 use std::{
     sync::mpsc::Receiver,
@@ -9,6 +9,8 @@ fn process(request: Request, config: FeaturesConfig) {
     if config.log {
         println!("New request: {}", request);
     }
+
+    if config.time {}
 }
 
 pub fn start_processor(rx: Receiver<Request>, config: FeaturesConfig) -> JoinHandle<()> {
