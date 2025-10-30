@@ -1,11 +1,11 @@
 use crate::config::structure::ProxyConfig;
-use crate::helpers::data::{self, Request};
+use crate::helpers::data::Request;
 use native_tls::TlsConnector;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::mpsc::Sender;
 use std::thread::{self, JoinHandle};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 fn rewrite_http_request(buffer: &[u8], clean_host: &str) -> Vec<u8> {
     let request = String::from_utf8_lossy(buffer);
@@ -26,7 +26,7 @@ fn rewrite_http_request(buffer: &[u8], clean_host: &str) -> Vec<u8> {
         let path = if url.starts_with("http://") || url.starts_with("https://") {
             url.split("://")
                 .nth(1)
-                .and_then(|s| s.split_once('/'))
+                .and_then(|str| str.split_once('/'))
                 .map(|(_, path)| format!("/{}", path))
                 .unwrap_or_else(|| "/".to_string())
         } else {
@@ -58,7 +58,7 @@ fn rewrite_http_request(buffer: &[u8], clean_host: &str) -> Vec<u8> {
     result.into_bytes()
 }
 
-fn handle_client(mut client: TcpStream, tx: Sender<data::Request>, config: ProxyConfig) {
+fn handle_client(mut client: TcpStream, tx: Sender<Request>, config: ProxyConfig) {
     let mut buffer = [0; 8192];
 
     let Ok(n) = client.read(&mut buffer) else {
@@ -121,15 +121,7 @@ fn handle_client(mut client: TcpStream, tx: Sender<data::Request>, config: Proxy
 
         let duration = start.elapsed();
 
-        match tx.send(Request {
-            location: host.to_string(),
-            target: host.to_string(),
-            path: path.to_string(),
-            time: duration.as_millis(),
-        }) {
-            Ok(_) => {}
-            Err(error) => eprintln!("Error sending data: {}", error),
-        }
+        send_request(tx.clone(), host, path, duration);
 
         let mut response_buffer = [0; 8192];
 
@@ -154,6 +146,10 @@ fn handle_client(mut client: TcpStream, tx: Sender<data::Request>, config: Proxy
             return;
         }
 
+        let duration = start.elapsed();
+
+        send_request(tx.clone(), host, path, duration);
+
         let mut response_buffer = [0; 8192];
         loop {
             match server.read(&mut response_buffer) {
@@ -175,7 +171,7 @@ fn handle_client(mut client: TcpStream, tx: Sender<data::Request>, config: Proxy
 
 pub fn start_proxy_listener(
     listener: TcpListener,
-    tx: Sender<data::Request>,
+    tx: Sender<Request>,
     config: ProxyConfig,
 ) -> JoinHandle<()> {
     thread::spawn(move || {
@@ -195,4 +191,16 @@ pub fn start_proxy_listener(
             }
         }
     })
+}
+
+fn send_request(tx: Sender<Request>, host: String, path: String, duration: Duration) {
+    match tx.send(Request {
+        location: host.to_string(),
+        target: host.to_string(),
+        path: path.to_string(),
+        time: duration.as_millis(),
+    }) {
+        Ok(_) => {}
+        Err(error) => eprintln!("Error sending data: {}", error),
+    }
 }

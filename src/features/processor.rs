@@ -1,6 +1,7 @@
 use crate::{config::structure::FeaturesConfig, helpers::data::Request};
 
 use std::{
+    io::Write,
     sync::mpsc::Receiver,
     thread::{self, JoinHandle},
 };
@@ -8,9 +9,13 @@ use std::{
 fn process(request: Request, config: FeaturesConfig) {
     if config.log {
         println!("New request: {}", request);
+        std::io::stdout().flush().unwrap();
     }
 
-    if config.time {}
+    if config.time {
+        println!("  Time taken: {}", request.time);
+        std::io::stdout().flush().unwrap();
+    }
 }
 
 pub fn start_processor(rx: Receiver<Request>, config: FeaturesConfig) -> JoinHandle<()> {

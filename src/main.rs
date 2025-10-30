@@ -7,10 +7,10 @@ use crate::config::structure::Config;
 use crate::features::processor;
 use crate::helpers::data::Request;
 use crate::network::proxy;
-use std::io;
 use std::net::TcpListener;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::JoinHandle;
+use std::io;
 
 const MAGENTA: &str = "\x1b[35m";
 const RESET: &str = "\x1b[0m";
@@ -54,7 +54,7 @@ fn main() -> io::Result<()> {
     let listener = match TcpListener::bind(&address) {
         Ok(val) => val,
         Err(error) => {
-            eprintln!("Error biding adress: {error}");
+            eprintln!("Error biding address: {error}");
 
             return Err(error);
         }
@@ -68,14 +68,14 @@ fn main() -> io::Result<()> {
         helpers::misc::format_hostname(helpers::misc::Protocol::Http, address)
     );
 
-    match processor_handle.join() {
-        Ok(_) => {}
-        Err(_) => eprintln!("Failed to join processor handle"),
-    }
-
     match proxy_handle.join() {
         Ok(_) => {}
         Err(_) => eprintln!("Failed to join proxy handle"),
+    }
+
+    match processor_handle.join() {
+        Ok(_) => {}
+        Err(_) => eprintln!("Failed to join processor handle"),
     }
 
     Ok(())
