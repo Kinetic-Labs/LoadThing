@@ -104,11 +104,6 @@ pub fn parse_config() -> io::Result<Config> {
         .map(|s| s == "true")
         .unwrap_or(true);
 
-    let time_enabled = find_attrset(&root, "features")
-        .and_then(|node| find_attr_value(&node, "time"))
-        .map(|s| s == "true")
-        .unwrap_or(true);
-
     Ok(Config {
         proxy_config: ProxyConfig {
             target: proxy_target,
@@ -119,9 +114,6 @@ pub fn parse_config() -> io::Result<Config> {
             port: lt_port,
             hostname: lt_hostname,
         },
-        features_config: FeaturesConfig {
-            log: log_enabled,
-            time: time_enabled,
-        },
+        features_config: FeaturesConfig { log: log_enabled },
     })
 }

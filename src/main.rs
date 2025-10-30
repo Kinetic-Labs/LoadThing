@@ -6,14 +6,14 @@ mod network;
 use crate::config::structure::Config;
 use crate::features::processor;
 use crate::helpers::data::Request;
+use crate::helpers::error::{ERROR_2, ERROR_10};
+use crate::helpers::{ansi, error};
 use crate::network::proxy;
+use std::io;
 use std::net::TcpListener;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::JoinHandle;
-use std::io;
 
-const MAGENTA: &str = "\x1b[35m";
-const RESET: &str = "\x1b[0m";
 const ASCII_ART: &str = r#"
        LoadThing
    ,--,           ,----,
@@ -45,7 +45,7 @@ fn start_tasks(
 }
 
 fn main() -> io::Result<()> {
-    println!("{}{}{}", MAGENTA, ASCII_ART, RESET);
+    println!("{}{}{}", ansi::MAGENTA, ASCII_ART, ansi::RESET);
 
     let config: Config = config::parser::parse_config()?;
     let port: u16 = config.web_config.port;
@@ -54,7 +54,7 @@ fn main() -> io::Result<()> {
     let listener = match TcpListener::bind(&address) {
         Ok(val) => val,
         Err(error) => {
-            eprintln!("Error biding address: {error}");
+            error::send_error(ERROR_2, String::from("while binding port"));
 
             return Err(error);
         }
@@ -64,18 +64,21 @@ fn main() -> io::Result<()> {
     let (processor_handle, proxy_handle) = start_tasks(tx, rx, listener, config);
 
     println!(
-        "LoadThing server running on {}",
-        helpers::misc::format_hostname(helpers::misc::Protocol::Http, address)
+        "{}LoadThing server running on {}{}{}\n",
+        ansi::GREEN,
+        ansi::ORANGE,
+        helpers::misc::format_hostname(helpers::misc::Protocol::Http, address),
+        ansi::RESET,
     );
 
     match proxy_handle.join() {
         Ok(_) => {}
-        Err(_) => eprintln!("Failed to join proxy handle"),
+        Err(_) => error::send_error(ERROR_10, String::from("while joining proxy handle")),
     }
 
     match processor_handle.join() {
         Ok(_) => {}
-        Err(_) => eprintln!("Failed to join processor handle"),
+        Err(_) => error::send_error(ERROR_10, String::from("while joining processor handle")),
     }
 
     Ok(())

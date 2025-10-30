@@ -14,7 +14,6 @@ pub struct WebConfig {
 #[derive(Clone)]
 pub struct FeaturesConfig {
     pub log: bool,
-    pub time: bool,
 }
 
 #[derive(Clone)]

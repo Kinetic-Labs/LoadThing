@@ -2,10 +2,10 @@
   # Configure the proxy
   proxy = {
     # Your application (preferably local network)
-    target = "http://127.0.0.1";
+    target = "https://neko.thoq.dev";
 
-    # Port to use (80 is default for http)
-    port = 5000;
+    # Port to use (443 is default for https)
+    port = 443;
 
     # Path to fetch ('/' is the root of page)
     path = "/";
@@ -24,8 +24,5 @@
   features = {
     # Log each request
     log = true;
-
-    # Time the response of each request
-    time = true;
   };
 }

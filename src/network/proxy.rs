@@ -1,5 +1,6 @@
 use crate::config::structure::ProxyConfig;
 use crate::helpers::data::Request;
+use crate::helpers::error::{self, ERROR_1, ERROR_4, ERROR_5, ERROR_6, ERROR_7, ERROR_9};
 use native_tls::TlsConnector;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -28,7 +29,7 @@ fn rewrite_http_request(buffer: &[u8], clean_host: &str) -> Vec<u8> {
                 .nth(1)
                 .and_then(|str| str.split_once('/'))
                 .map(|(_, path)| format!("/{}", path))
-                .unwrap_or_else(|| "/".to_string())
+                .unwrap_or_else(|| error::fmt_error(ERROR_1))
         } else {
             url.to_string()
         };
@@ -84,7 +85,11 @@ fn handle_client(mut client: TcpStream, tx: Sender<Request>, config: ProxyConfig
     let mut server = match TcpStream::connect(&target_addr) {
         Ok(s) => s,
         Err(error) => {
-            eprintln!("Failed to connect to {}: {}", target_addr, error);
+            error::send_error(
+                ERROR_4,
+                format!("while connecting to: {target_addr}: {error}"),
+            );
+
             let error_response = "HTTP/1.1 502 Bad Gateway\r\n\r\n";
             let _ = client.write_all(error_response.as_bytes());
             return;
@@ -97,7 +102,7 @@ fn handle_client(mut client: TcpStream, tx: Sender<Request>, config: ProxyConfig
         let connector = match TlsConnector::new() {
             Ok(c) => c,
             Err(error) => {
-                eprintln!("Failed to create TLS connector: {}", error);
+                error::send_error(ERROR_5, format!("while creating TLSConnector : {error}"));
                 let error_response = "HTTP/1.1 502 Bad Gateway\r\n\r\n";
                 let _ = client.write_all(error_response.as_bytes());
                 return;
@@ -107,7 +112,7 @@ fn handle_client(mut client: TcpStream, tx: Sender<Request>, config: ProxyConfig
         let mut tls_stream = match connector.connect(clean_host, server) {
             Ok(s) => s,
             Err(error) => {
-                eprintln!("Failed to establish TLS connection: {}", error);
+                error::send_error(ERROR_5, format!("while establishing : {error}"));
                 let error_response = "HTTP/1.1 502 Bad Gateway\r\n\r\n";
                 let _ = client.write_all(error_response.as_bytes());
                 return;
@@ -115,7 +120,8 @@ fn handle_client(mut client: TcpStream, tx: Sender<Request>, config: ProxyConfig
         };
 
         if let Err(error) = tls_stream.write_all(&rewritten_request) {
-            eprintln!("Failed to write to TLS server: {}", error);
+            error::send_error(ERROR_5, format!("while attempting to stream : {error}"));
+
             return;
         }
 
@@ -130,19 +136,19 @@ fn handle_client(mut client: TcpStream, tx: Sender<Request>, config: ProxyConfig
                 Ok(0) => break,
                 Ok(n) => {
                     if let Err(error) = client.write_all(&response_buffer[..n]) {
-                        eprintln!("Failed to write to client: {}", error);
+                        error::send_error(ERROR_7, format!("while reading from client : {error}"));
                         break;
                     }
                 }
                 Err(error) => {
-                    eprintln!("Failed to read from TLS server: {}", error);
+                    error::send_error(ERROR_5, format!("while reading from TLS server : {error}"));
                     break;
                 }
             }
         }
     } else {
         if let Err(error) = server.write_all(&rewritten_request) {
-            eprintln!("Failed to write to server: {}", error);
+            error::send_error(ERROR_6, format!("while writing to server : {error}"));
             return;
         }
 
@@ -156,12 +162,12 @@ fn handle_client(mut client: TcpStream, tx: Sender<Request>, config: ProxyConfig
                 Ok(0) => break,
                 Ok(n) => {
                     if let Err(error) = client.write_all(&response_buffer[..n]) {
-                        eprintln!("Failed to write to client: {}", error);
+                        error::send_error(ERROR_6, format!("while writing to client : {error}"));
                         break;
                     }
                 }
                 Err(error) => {
-                    eprintln!("Failed to read from server: {}", error);
+                    error::send_error(ERROR_6, format!("while writing to server : {error}"));
                     break;
                 }
             }
@@ -186,7 +192,7 @@ pub fn start_proxy_listener(
                     });
                 }
                 Err(error) => {
-                    eprintln!("Connection failed: {}", error);
+                    error::send_error(ERROR_7, format!("while reading from server : {error}"));
                 }
             }
         }
@@ -201,6 +207,6 @@ fn send_request(tx: Sender<Request>, host: String, path: String, duration: Durat
         time: duration.as_millis(),
     }) {
         Ok(_) => {}
-        Err(error) => eprintln!("Error sending data: {}", error),
+        Err(error) => error::send_error(ERROR_9, format!("while sending request data : {error}")),
     }
 }
