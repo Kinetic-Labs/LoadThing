@@ -1,0 +1,9 @@
+[package]
+name = "load_thing"
+version = "0.2.0"
+edition = "2024"
+
+[dependencies]
+libloading = "0.8.3"
+native-tls = "0.2.14"
+rnix = "0.12.0"

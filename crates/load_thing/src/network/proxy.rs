@@ -1,22 +1,29 @@
 use crate::config::structure::ProxyConfig;
 use crate::helpers::data::Request;
-use crate::helpers::error::{self, ERROR_1, ERROR_4, ERROR_5, ERROR_6, ERROR_7, ERROR_9};
+use crate::helpers::error::{
+    self, ERROR_1_FAILED_TO_GET_URI_PATH, ERROR_4_FETCH_ERROR, ERROR_5_FAILURE_TLS_HANDSHAKE,
+    ERROR_6_NET_WRITE_ERROR, ERROR_7_NET_READ_ERROR, ERROR_9_THREAD_MESSAGING_ERROR,
+};
+use crate::plugins::api::LOADED_PLUGINS;
 use native_tls::TlsConnector;
+use std::ffi::CString;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::mpsc::Sender;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-fn rewrite_http_request(buffer: &[u8], clean_host: &str) -> Vec<u8> {
+//noinspection HttpUrlsUsage
+fn rewrite_http_request(buffer: &[u8], clean_host: &str) -> (Vec<u8>, String) {
     let request = String::from_utf8_lossy(buffer);
     let lines: Vec<&str> = request.lines().collect();
 
     if lines.is_empty() {
-        return buffer.to_vec();
+        return (buffer.to_vec(), "/".to_string());
     }
 
     let mut result = String::new();
+    let mut request_path = "/".to_string();
 
     let first_line_parts: Vec<&str> = lines[0].split_whitespace().collect();
     if first_line_parts.len() >= 3 {
@@ -29,11 +36,12 @@ fn rewrite_http_request(buffer: &[u8], clean_host: &str) -> Vec<u8> {
                 .nth(1)
                 .and_then(|str| str.split_once('/'))
                 .map(|(_, path)| format!("/{}", path))
-                .unwrap_or_else(|| error::fmt_error(ERROR_1))
+                .unwrap_or_else(|| error::fmt_error(ERROR_1_FAILED_TO_GET_URI_PATH))
         } else {
             url.to_string()
         };
 
+        request_path = path.clone();
         result.push_str(&format!("{} {} {}\r\n", method, path, version));
     } else {
         result.push_str(lines[0]);
@@ -56,10 +64,16 @@ fn rewrite_http_request(buffer: &[u8], clean_host: &str) -> Vec<u8> {
     }
 
     result.push_str("\r\n");
-    result.into_bytes()
+    (result.into_bytes(), request_path)
 }
 
+//noinspection HttpUrlsUsage
 fn handle_client(mut client: TcpStream, tx: Sender<Request>, config: ProxyConfig) {
+    let client_ip = match client.peer_addr() {
+        Ok(addr) => addr.ip().to_string(),
+        Err(_) => "unknown".to_string(),
+    };
+
     let mut buffer = [0; 8192];
 
     let Ok(n) = client.read(&mut buffer) else {
@@ -81,12 +95,12 @@ fn handle_client(mut client: TcpStream, tx: Sender<Request>, config: ProxyConfig
         .trim_end_matches('/');
 
     let start = Instant::now();
-    let target_addr = format!("{}:{}", clean_host, port);
+    let target_addr = format!("{clean_host}:{port}{path}");
     let mut server = match TcpStream::connect(&target_addr) {
-        Ok(s) => s,
+        Ok(stream) => stream,
         Err(error) => {
             error::send_error(
-                ERROR_4,
+                ERROR_4_FETCH_ERROR,
                 format!("while connecting to: {target_addr}: {error}"),
             );
 
@@ -96,13 +110,28 @@ fn handle_client(mut client: TcpStream, tx: Sender<Request>, config: ProxyConfig
         }
     };
 
-    let rewritten_request = rewrite_http_request(&buffer[..n], clean_host);
+    let (rewritten_request, request_path) = rewrite_http_request(&buffer[..n], clean_host);
+
+    if let Some(plugins) = LOADED_PLUGINS.get() {
+        let plugins = plugins.lock().unwrap();
+
+        for api in plugins.iter() {
+            let ip_cstr = CString::new(client_ip.as_str()).unwrap();
+            let path_cstr = CString::new(request_path.as_str()).unwrap();
+            unsafe {
+                (api.on_request)(ip_cstr.as_ptr(), path_cstr.as_ptr());
+            }
+        }
+    }
 
     if use_tls {
         let connector = match TlsConnector::new() {
             Ok(c) => c,
             Err(error) => {
-                error::send_error(ERROR_5, format!("while creating TLSConnector : {error}"));
+                error::send_error(
+                    ERROR_5_FAILURE_TLS_HANDSHAKE,
+                    format!("while creating TLSConnector : {error}"),
+                );
                 let error_response = "HTTP/1.1 502 Bad Gateway\r\n\r\n";
                 let _ = client.write_all(error_response.as_bytes());
                 return;
@@ -112,7 +141,10 @@ fn handle_client(mut client: TcpStream, tx: Sender<Request>, config: ProxyConfig
         let mut tls_stream = match connector.connect(clean_host, server) {
             Ok(s) => s,
             Err(error) => {
-                error::send_error(ERROR_5, format!("while establishing : {error}"));
+                error::send_error(
+                    ERROR_5_FAILURE_TLS_HANDSHAKE,
+                    format!("while establishing : {error}"),
+                );
                 let error_response = "HTTP/1.1 502 Bad Gateway\r\n\r\n";
                 let _ = client.write_all(error_response.as_bytes());
                 return;
@@ -120,14 +152,17 @@ fn handle_client(mut client: TcpStream, tx: Sender<Request>, config: ProxyConfig
         };
 
         if let Err(error) = tls_stream.write_all(&rewritten_request) {
-            error::send_error(ERROR_5, format!("while attempting to stream : {error}"));
+            error::send_error(
+                ERROR_5_FAILURE_TLS_HANDSHAKE,
+                format!("while attempting to stream : {error}"),
+            );
 
             return;
         }
 
         let duration = start.elapsed();
 
-        send_request(tx.clone(), host, path, duration);
+        send_request(tx.clone(), host, request_path, duration, client_ip);
 
         let mut response_buffer = [0; 8192];
 
@@ -136,25 +171,34 @@ fn handle_client(mut client: TcpStream, tx: Sender<Request>, config: ProxyConfig
                 Ok(0) => break,
                 Ok(n) => {
                     if let Err(error) = client.write_all(&response_buffer[..n]) {
-                        error::send_error(ERROR_7, format!("while reading from client : {error}"));
+                        error::send_error(
+                            ERROR_7_NET_READ_ERROR,
+                            format!("while reading from client : {error}"),
+                        );
                         break;
                     }
                 }
                 Err(error) => {
-                    error::send_error(ERROR_5, format!("while reading from TLS server : {error}"));
+                    error::send_error(
+                        ERROR_5_FAILURE_TLS_HANDSHAKE,
+                        format!("while reading from TLS server : {error}"),
+                    );
                     break;
                 }
             }
         }
     } else {
         if let Err(error) = server.write_all(&rewritten_request) {
-            error::send_error(ERROR_6, format!("while writing to server : {error}"));
+            error::send_error(
+                ERROR_6_NET_WRITE_ERROR,
+                format!("while writing to server : {error}"),
+            );
             return;
         }
 
         let duration = start.elapsed();
 
-        send_request(tx.clone(), host, path, duration);
+        send_request(tx.clone(), host, request_path, duration, client_ip);
 
         let mut response_buffer = [0; 8192];
         loop {
@@ -162,12 +206,18 @@ fn handle_client(mut client: TcpStream, tx: Sender<Request>, config: ProxyConfig
                 Ok(0) => break,
                 Ok(n) => {
                     if let Err(error) = client.write_all(&response_buffer[..n]) {
-                        error::send_error(ERROR_6, format!("while writing to client : {error}"));
+                        error::send_error(
+                            ERROR_6_NET_WRITE_ERROR,
+                            format!("while writing to client : {error}"),
+                        );
                         break;
                     }
                 }
                 Err(error) => {
-                    error::send_error(ERROR_6, format!("while writing to server : {error}"));
+                    error::send_error(
+                        ERROR_6_NET_WRITE_ERROR,
+                        format!("while writing to server : {error}"),
+                    );
                     break;
                 }
             }
@@ -192,21 +242,28 @@ pub fn start_proxy_listener(
                     });
                 }
                 Err(error) => {
-                    error::send_error(ERROR_7, format!("while reading from server : {error}"));
+                    error::send_error(
+                        ERROR_7_NET_READ_ERROR,
+                        format!("while reading from server : {error}"),
+                    );
                 }
             }
         }
     })
 }
 
-fn send_request(tx: Sender<Request>, host: String, path: String, duration: Duration) {
+fn send_request(tx: Sender<Request>, host: String, path: String, duration: Duration, ip: String) {
     match tx.send(Request {
         location: host.to_string(),
         target: host.to_string(),
         path: path.to_string(),
         time: duration.as_millis(),
+        ip,
     }) {
         Ok(_) => {}
-        Err(error) => error::send_error(ERROR_9, format!("while sending request data : {error}")),
+        Err(error) => error::send_error(
+            ERROR_9_THREAD_MESSAGING_ERROR,
+            format!("while sending request data : {error}"),
+        ),
     }
 }

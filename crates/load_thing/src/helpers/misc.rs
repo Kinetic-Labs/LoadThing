@@ -18,3 +18,15 @@ impl fmt::Display for Protocol {
 pub fn format_hostname(protocol: Protocol, raw: String) -> String {
     format!("{}://{}", protocol.to_string().to_lowercase(), raw)
 }
+
+pub fn pad_string(string: &str, padding: i32) -> String {
+    let mut new_string = String::new();
+
+    new_string.push_str(string);
+
+    for _ in 0..padding {
+        new_string.push_str("   ");
+    }
+
+    new_string
+}

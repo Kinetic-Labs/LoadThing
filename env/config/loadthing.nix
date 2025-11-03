@@ -2,13 +2,13 @@
   # Configure the proxy
   proxy = {
     # Your application (preferably local network)
-    target = "https://neko.thoq.dev";
+    target = "https://cirkl.ai";
 
     # Port to use (443 is default for https)
     port = 443;
 
-    # Path to fetch ('/' is the root of page)
-    path = "/";
+    # Path to fetch (leave blank for root, always start a path with '/')
+    path = "";
   };
 
   # LoadThing's web server config

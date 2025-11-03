@@ -2,11 +2,13 @@ mod config;
 mod features;
 mod helpers;
 mod network;
+mod plugins;
 
 use crate::config::structure::Config;
 use crate::features::processor;
 use crate::helpers::data::Request;
-use crate::helpers::error::{ERROR_2, ERROR_10};
+use crate::helpers::data::LICENSE_MESSAGE;
+use crate::helpers::error::{ERROR_10_THREAD_JOIN_ERROR, ERROR_2_BIND_ERROR};
 use crate::helpers::{ansi, error};
 use crate::network::proxy;
 use std::io;
@@ -45,7 +47,10 @@ fn start_tasks(
 }
 
 fn main() -> io::Result<()> {
+    println!("{LICENSE_MESSAGE}");
     println!("{}{}{}", ansi::MAGENTA, ASCII_ART, ansi::RESET);
+
+    plugins::loader::load_plugins();
 
     let config: Config = config::parser::parse_config()?;
     let port: u16 = config.web_config.port;
@@ -54,7 +59,7 @@ fn main() -> io::Result<()> {
     let listener = match TcpListener::bind(&address) {
         Ok(val) => val,
         Err(error) => {
-            error::send_error(ERROR_2, String::from("while binding port"));
+            error::send_error(ERROR_2_BIND_ERROR, String::from("while binding port"));
 
             return Err(error);
         }
@@ -73,12 +78,18 @@ fn main() -> io::Result<()> {
 
     match proxy_handle.join() {
         Ok(_) => {}
-        Err(_) => error::send_error(ERROR_10, String::from("while joining proxy handle")),
+        Err(_) => error::send_error(
+            ERROR_10_THREAD_JOIN_ERROR,
+            String::from("while joining proxy handle"),
+        ),
     }
 
     match processor_handle.join() {
         Ok(_) => {}
-        Err(_) => error::send_error(ERROR_10, String::from("while joining processor handle")),
+        Err(_) => error::send_error(
+            ERROR_10_THREAD_JOIN_ERROR,
+            String::from("while joining processor handle"),
+        ),
     }
 
     Ok(())
