@@ -8,7 +8,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-fn process(request: Request, config: &FeaturesConfig, logger: Arc<Mutex<TableLogger>>) {
+fn process(request: Request, config: &FeaturesConfig, logger: &Arc<Mutex<TableLogger>>) {
     if config.log {
         let mut logger = logger.lock().unwrap();
 
@@ -20,12 +20,7 @@ fn process(request: Request, config: &FeaturesConfig, logger: Arc<Mutex<TableLog
             format!("{}ms", request.time)
         };
 
-        logger.add_row(vec![
-            request.ip,
-            request.location.to_string(),
-            request.path.to_string(),
-            time_str,
-        ]);
+        logger.add_row(vec![request.ip, request.location, request.path, time_str]);
         logger.log();
     }
 }
@@ -34,14 +29,14 @@ pub fn start_processor(rx: Receiver<Request>, config: FeaturesConfig) -> JoinHan
     let logger = Arc::new(Mutex::new(TableLogger::new(vec![
         misc::pad_string("IP", 5),
         misc::pad_string("Location", 5),
-        misc::pad_string("Path", 20),
+        misc::pad_string("Path", 30),
         misc::pad_string("Time", 2),
     ])));
 
     thread::spawn(move || {
         loop {
             match rx.recv() {
-                Ok(request) => process(request, &config, Arc::clone(&logger)),
+                Ok(request) => process(request, &config, &logger),
                 Err(error) => error::send_error(
                     ERROR_9_THREAD_MESSAGING_ERROR,
                     format!("while receiving request data : {error}"),

@@ -6,7 +6,6 @@ This is free software, and you are welcome to redistribute it under certain cond
 
 Please see GNU GPL-3 <https://www.gnu.org/licenses/gpl-3.0.en.html> for more details"#;
 
-#[derive(Clone)]
 pub struct Request {
     pub location: String,
     pub target: String,

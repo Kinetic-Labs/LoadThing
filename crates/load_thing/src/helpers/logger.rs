@@ -2,7 +2,6 @@ use std::fmt;
 
 use crate::helpers::ansi;
 
-#[derive(Clone)]
 pub struct TableLogger {
     headers: Vec<String>,
     rows: Vec<Vec<String>>,
