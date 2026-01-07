@@ -6,9 +6,9 @@ mod plugins;
 
 use crate::config::structure::Config;
 use crate::features::processor;
-use crate::helpers::data::Request;
 use crate::helpers::data::LICENSE_MESSAGE;
-use crate::helpers::error::{ERROR_10_THREAD_JOIN_ERROR, ERROR_2_BIND_ERROR};
+use crate::helpers::data::Request;
+use crate::helpers::error::{ERROR_2_BIND_ERROR, ERROR_10_THREAD_JOIN_ERROR};
 use crate::helpers::{ansi, error};
 use crate::network::proxy;
 use std::io;
@@ -54,7 +54,7 @@ fn main() -> io::Result<()> {
 
     let config: Config = config::parser::parse_config()?;
     let port: u16 = config.web_config.port;
-    let hostname: String = config.clone().web_config.hostname;
+    let hostname: &String = &config.web_config.hostname;
     let address: String = format!("{hostname}:{port}");
     let listener = match TcpListener::bind(&address) {
         Ok(val) => val,

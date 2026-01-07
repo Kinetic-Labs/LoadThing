@@ -1,0 +1,9 @@
+#!/bin/bash
+
+set -eu
+
+cd env
+
+cargo run "$@"
+
+exit $?

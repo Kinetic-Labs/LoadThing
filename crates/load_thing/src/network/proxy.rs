@@ -19,11 +19,11 @@ fn rewrite_http_request(buffer: &[u8], clean_host: &str) -> (Vec<u8>, String) {
     let lines: Vec<&str> = request.lines().collect();
 
     if lines.is_empty() {
-        return (buffer.to_vec(), "/".to_string());
+        return (buffer.to_vec(), "/".into());
     }
 
-    let mut result = String::new();
-    let mut request_path = "/".to_string();
+    let mut result: String = String::new();
+    let mut request_path = "/".into();
 
     let first_line_parts: Vec<&str> = lines[0].split_whitespace().collect();
     if first_line_parts.len() >= 3 {
@@ -31,18 +31,17 @@ fn rewrite_http_request(buffer: &[u8], clean_host: &str) -> (Vec<u8>, String) {
         let url = first_line_parts[1];
         let version = first_line_parts[2];
 
-        let path = if url.starts_with("http://") || url.starts_with("https://") {
+        request_path = if url.starts_with("http://") || url.starts_with("https://") {
             url.split("://")
                 .nth(1)
                 .and_then(|str| str.split_once('/'))
                 .map(|(_, path)| format!("/{}", path))
                 .unwrap_or_else(|| error::fmt_error(ERROR_1_FAILED_TO_GET_URI_PATH))
         } else {
-            url.to_string()
+            url.into()
         };
 
-        request_path = path.clone();
-        result.push_str(&format!("{} {} {}\r\n", method, path, version));
+        result.push_str(&format!("{} {} {}\r\n", method, request_path, version));
     } else {
         result.push_str(lines[0]);
         result.push_str("\r\n");
@@ -67,8 +66,7 @@ fn rewrite_http_request(buffer: &[u8], clean_host: &str) -> (Vec<u8>, String) {
     (result.into_bytes(), request_path)
 }
 
-//noinspection HttpUrlsUsage
-fn handle_client(mut client: TcpStream, tx: Sender<Request>, config: ProxyConfig) {
+fn handle_client(mut client: TcpStream, tx: &Sender<Request>, config: &ProxyConfig) {
     let client_ip = match client.peer_addr() {
         Ok(addr) => addr.ip().to_string(),
         Err(_) => "unknown".to_string(),
@@ -84,9 +82,9 @@ fn handle_client(mut client: TcpStream, tx: Sender<Request>, config: ProxyConfig
         return;
     }
 
-    let host = config.target;
+    let host = &config.target;
     let port = config.port;
-    let path = config.path;
+    let path = &config.path;
     let use_tls = host.starts_with("https://");
 
     let clean_host = host
@@ -162,7 +160,7 @@ fn handle_client(mut client: TcpStream, tx: Sender<Request>, config: ProxyConfig
 
         let duration = start.elapsed();
 
-        send_request(tx.clone(), host, request_path, duration, client_ip);
+        send_request(&tx, &host, request_path, duration, client_ip);
 
         let mut response_buffer = [0; 8192];
 
@@ -198,7 +196,7 @@ fn handle_client(mut client: TcpStream, tx: Sender<Request>, config: ProxyConfig
 
         let duration = start.elapsed();
 
-        send_request(tx.clone(), host, request_path, duration, client_ip);
+        send_request(&tx, host, request_path, duration, client_ip);
 
         let mut response_buffer = [0; 8192];
         loop {
@@ -234,12 +232,7 @@ pub fn start_proxy_listener(
         for stream in listener.incoming() {
             match stream {
                 Ok(stream) => {
-                    let tx = tx.clone();
-                    let config = config.clone();
-
-                    thread::spawn(move || {
-                        handle_client(stream, tx, config);
-                    });
+                    handle_client(stream, &tx, &config);
                 }
                 Err(error) => {
                     error::send_error(
@@ -252,7 +245,7 @@ pub fn start_proxy_listener(
     })
 }
 
-fn send_request(tx: Sender<Request>, host: String, path: String, duration: Duration, ip: String) {
+fn send_request(tx: &Sender<Request>, host: &String, path: String, duration: Duration, ip: String) {
     match tx.send(Request {
         location: host.to_string(),
         target: host.to_string(),

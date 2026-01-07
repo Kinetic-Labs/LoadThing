@@ -2,13 +2,13 @@ use crate::helpers::error::{self, ERROR_9_THREAD_MESSAGING_ERROR};
 use crate::helpers::logger::TableLogger;
 use crate::{config::structure::FeaturesConfig, helpers::data::Request};
 
+use crate::helpers::misc;
 use std::{
-    sync::{mpsc::Receiver, Arc, Mutex},
+    sync::{Arc, Mutex, mpsc::Receiver},
     thread::{self, JoinHandle},
 };
-use crate::helpers::misc;
 
-fn process(request: Request, config: FeaturesConfig, logger: Arc<Mutex<TableLogger>>) {
+fn process(request: Request, config: &FeaturesConfig, logger: Arc<Mutex<TableLogger>>) {
     if config.log {
         let mut logger = logger.lock().unwrap();
 
@@ -41,7 +41,7 @@ pub fn start_processor(rx: Receiver<Request>, config: FeaturesConfig) -> JoinHan
     thread::spawn(move || {
         loop {
             match rx.recv() {
-                Ok(request) => process(request, config.clone(), Arc::clone(&logger)),
+                Ok(request) => process(request, &config, Arc::clone(&logger)),
                 Err(error) => error::send_error(
                     ERROR_9_THREAD_MESSAGING_ERROR,
                     format!("while receiving request data : {error}"),

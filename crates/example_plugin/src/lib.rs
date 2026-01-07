@@ -2,7 +2,6 @@
 ///
 /// An example plugin to help you get started
 /// developing plugins for LoadThing
-
 use std::collections::HashMap;
 use std::ffi::CStr;
 use std::os::raw::c_char;
@@ -28,7 +27,6 @@ pub extern "C" fn load_thing_init() {
 // This function will be called by LoadThing on each request.
 #[unsafe(no_mangle)]
 pub extern "C" fn on_request(ip: *const c_char, path: *const c_char) {
-    // Ensure the logger is initialized.
     let logger = match IP_LOGGER.get() {
         Some(logger) => logger,
         None => {
@@ -38,17 +36,40 @@ pub extern "C" fn on_request(ip: *const c_char, path: *const c_char) {
     };
 
     let ip_str = unsafe { CStr::from_ptr(ip) }.to_string_lossy().into_owned();
-    let path_str = unsafe { CStr::from_ptr(path) }.to_string_lossy().into_owned();
+    let path_str = unsafe { CStr::from_ptr(path) }
+        .to_string_lossy()
+        .into_owned();
 
-    let mut log = logger.lock().unwrap();
-    let path_map = log.entry(ip_str.clone()).or_default();
-    let count = path_map.entry(path_str.clone()).or_default();
+    let count = {
+        let log = logger.lock();
+        if let Ok(mut log) = log {
+            let path_map = log.entry(ip_str).or_default();
+            let count = path_map.entry(path_str).or_default();
+            *count += 1;
+            *count
+        } else {
+            return;
+        }
+    };
 
-    *count += 1;
+    let log = logger.lock();
+    if let Ok(log) = log {
+        let ip_lookup = unsafe { CStr::from_ptr(ip) }.to_string_lossy();
+        let path_lookup = unsafe { CStr::from_ptr(path) }.to_string_lossy();
+        let ip_key = log
+            .get_key_value(ip_lookup.as_ref())
+            .map(|(k, _)| k)
+            .unwrap();
+        let path_map = log.get(ip_key).unwrap();
+        let path_key = path_map
+            .get_key_value(path_lookup.as_ref())
+            .map(|(k, _)| k)
+            .unwrap();
 
-    // Recommended: name your plugin in logs
-    println!(
-        "[example_plugin] Request logged: IP = {}, Path = {}, Count = {}",
-        ip_str, path_str, count
-    );
+        // Recommended: name your plugin in logs
+        println!(
+            "[example_plugin] Request logged: IP = {}, Path = {}, Count = {}",
+            ip_key, path_key, count
+        );
+    }
 }
